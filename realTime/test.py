@@ -6,12 +6,6 @@ import math
 import time
 import glob
 import matplotlib.pyplot as plt
-import socket
-
-
-host, port = "192.168.194.223", 25001
-sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-sock.connect((host, port))
 
 
 def generatePosition(fileName): #生成這個frame的向量資訊(讀取json)
@@ -279,215 +273,64 @@ def VectorDiffLoss(vec1,vec2):
             t = (t/6.25)**(4) #相差5度內沒什麼關係
             points += t
         i+=1
-    if zeroVectorCount >= 6: #如果超過8個向量沒被偵測,讓分數一次加很多
-        points += 500000
-    return points/16
-
-def VectorDiffLoss_SwingFinish(vec1,vec2):
-    points = 0
-    i = 1
-    zeroVectorCount = 0
-    while i < 16 :
-        if i == 4 or i == 7 :
-            i += 1
-            continue
-        if(vec1[i][0] == 0 and vec1[i][1] == 0) or (vec2[i][0] == 0 and vec2[i][1] == 0) :#如果有一個是0向量
-            zeroVectorCount += 1
-            points += 1 #加一意思一下
-        else :
-            t = angleDiff(vec1[i],vec2[i])
-            if i == 3 or i == 6:
-                t = (t/12.5)**(4) #相差12.5度內沒什麼關係
-            else:
-                t = (t/6.25)**(4) #相差5度內沒什麼關係
-            points += t
-        i+=1
-    if zeroVectorCount >= 6: #如果超過8個向量沒被偵測,讓分數一次加很多
-        points += 500000
-    return points/12
+    if zeroVectorCount >= 8: #如果超過8個向量沒被偵測,讓分數一次加很多
+        points += 5000
+    return points
 
 def scoreCalculate(VectorList,path_to_Target):
     Target_json_files = [pos_json for pos_json in os.listdir(path_to_Target) if pos_json.endswith('.json')]
     totalLoss = 0
     
-    for i in range(len(VectorList)):
-        minLoss = 999999999
-        for j in range(len(Target_json_files)):
-            compareVector = generateVector(path_to_Target+Target_json_files[j])
-            lossValue = VectorDiffLoss(VectorList[i],compareVector)
-            if lossValue < minLoss:
-                minLoss = lossValue
-        totalLoss += minLoss
+    for index, currentFrameName in enumerate(Target_json_files):
+        currentVector = generateVector(path_to_Target+currentFrameName) #取得target的向量資訊
 
-    totalLoss /= len(VectorList)
+        percent = (index+1) / len(Target_json_files) #取得這個frame所占百分比
+        whichToChoose =  percent*len(VectorList)
+
+        compareVector = []
+        if whichToChoose < 1 : #直接使用第一個
+            compareVector = VectorList[0] #取得要比對的向量資訊
+        else:
+            if whichToChoose % 1 != 0: #如果是小數,要用2個frame做merge
+                compareVector = mergeFrame(whichToChoose,VectorList[math.floor(whichToChoose)-1],VectorList[math.floor(whichToChoose)])
+            else: #整數直接取用
+                compareVector = VectorList[int(whichToChoose)-1] #取得要比對的向量資訊
+        lossValue = VectorDiffLoss(currentVector,compareVector)
+        totalLoss += lossValue
+
+    totalLoss /= len(Target_json_files)
     return totalLoss
 
-
-lastFiles = glob.glob('Mykey/*')
-for f in lastFiles:
-    os.remove(f)
-subprocess.Popen(["C:\\Users\\michael\\Desktop\\openpose\\build\\x64\\Debug\\OpenPoseDemo.exe","--model_folder","C:\\Users\\michael\\Desktop\\openpose\\models","--num_gpu_start","0","--process_real_time","-number_people_max","1","--net_resolution","480x480","--write_json","MyKey"])
-fileNumber = 0
-
-swingState = 0
-#0->沒有準備
-#1->已經準備完成,將要預備揮桿
-#2->揮桿預備完成,將要揮桿
+currentVector = generateVector("Output_Key/Front_Ready_Begin_keypoints.json") 
+currentPos = generatePosition("Output_Key/Front_Ready_Begin_keypoints.json") 
 
 ReadyVectorList = []
 SwingVectorList = []
 
 SwingPosList = []
 
-pointLost = []
-
-score = 0
-
-plt.figure()
-
-while True:
-    nextFileNumber = fileNumber+1
-    numberDigits_1 = len(str(fileNumber))
-    numberDigits_2 = len(str(nextFileNumber))
-    fileName = 'MyKey/'
-    nextFileName = 'MyKey/'
-    for i in range(0,12-numberDigits_1):
-        fileName += '0'
-    for i in range(0,12-numberDigits_2):
-        nextFileName += '0'
-    fileName += str(fileNumber)
-    fileName += '_keypoints.json'
-    nextFileName += str(nextFileNumber)
-    nextFileName += '_keypoints.json'
-    while not os.path.exists(nextFileName): #下一個檔案存在才會去進行
-        time.sleep(0.01)
-
-    #successfully read current frame
-    with open(fileName) as f:
-        data = json.load(f)
-        if len(data["people"]) > 0 :
-            currentVector = generateVector(fileName) #取得target的向量資訊
-            currentPos = generatePosition(fileName) #取得target的向量資訊
-
-            if swingState == 1:
-                ReadyVectorList.append(currentVector)
-
-            if swingState == 2:
-                SwingVectorList.append(currentVector)
-                SwingPosList.append(currentPos)
-            
-            ready_begin_compareVector = generateVector('Output_Key/Front_Ready_Begin_keypoints.json') #取得要比對的向量資訊
-            ready_end_compareVector = generateVector('Output_Key/Front_Ready_End_keypoints.json') #取得要比對的向量資訊
-            swing_end_compareVector = generateVector('Output_Key/Front_Swing_End_keypoints.json') #取得要比對的向量資訊
+SwingVectorList.append(currentVector)
+SwingPosList.append(currentPos)
 
 
-            print(f'{VectorDiffLoss(currentVector,ready_begin_compareVector)} {VectorDiffLoss(currentVector,ready_end_compareVector)} {VectorDiffLoss_SwingFinish(currentVector,swing_end_compareVector)}')
-            
-            if swingState == 0 or swingState == 1 :
-                if VectorDiffLoss(currentVector,ready_begin_compareVector) < 620 : #重新抓取
-                    ReadyVectorList.clear()
-                    ReadyVectorList.append(currentVector)
-                    score = 0
-                    swingState = 1
-                    passStr = "-2"
-                    sock.sendall(passStr.encode("UTF-8")) #Converting string to Byte, and sending it to C#
-                    receivedData = sock.recv(1024).decode("UTF-8") #receiveing data in Byte fron C#, and converting it to String
-            
-            if swingState == 1 or swingState == 2:
-                if VectorDiffLoss(currentVector,ready_end_compareVector) < 2000 : #偵測到預備揮桿完成
-                    if swingState == 1 :
-                        score += scoreCalculate(ReadyVectorList,'Output_Video_Key/Front_Ready/')
-                        swingState = 2
-                        print(f'detect ready pose : , ' , end='')
-                    SwingVectorList.clear()
-                    SwingPosList.clear()
-                    SwingVectorList.append(currentVector)
-                    SwingPosList.append(currentPos)
-                    passStr = "-3"
-                    sock.sendall(passStr.encode("UTF-8")) #Converting string to Byte, and sending it to C#
-                    receivedData = sock.recv(1024).decode("UTF-8") #receiveing data in Byte fron C#, and converting it to String
-            
-            if swingState == 2:
-                if VectorDiffLoss_SwingFinish(currentVector,swing_end_compareVector) < 2250 : #偵測到完整揮桿完成
-                    swingState = 0
-                    score += scoreCalculate(SwingVectorList,'Output_Video_Key/Front_Swing/')
-                    score /= 2
+for i in range(len(SwingVectorList)) :
+    plt.rcParams["figure.figsize"] = [10, 10]
+    plt.rcParams["figure.autolayout"] = True
+    soa = np.array([0,0,0,0])
 
-                    passStr = str(score)
-                    if score <= 1000:
-                        passStr = 'good'
-                    elif score > 1000 and score <= 2000:
-                        passStr = 'medium'
-                    else:
-                        passStr = 'bad'
+    for j in range(16) :
+        newrow = [SwingPosList[i][j][0],SwingPosList[i][j][1],SwingVectorList[i][j][0],SwingVectorList[i][j][1]]
+        soa = np.vstack([soa, newrow])
 
-                    print(f'your swing score : {score} , {passStr}')
-
-                    sock.sendall(passStr.encode("UTF-8")) #Converting string to Byte, and sending it to C#
-                    receivedData = sock.recv(1024).decode("UTF-8") #receiveing data in Byte fron C#, and converting it to String
-
-                    outputVector_fileNum = 0
-
-                    image_dir = 'vector/'
-                    filelist = glob.glob(os.path.join(image_dir, "*"))
-                    for f in filelist:
-                        os.remove(f)
-
-                    for i in range(len(SwingVectorList)) :
-                        plt.rcParams["figure.figsize"] = [10, 10]
-                        plt.rcParams["figure.autolayout"] = True
-                        soa = np.array([0,0,0,0])
-
-                        for j in range(16) :
-                            newrow = [SwingPosList[i][j][0],SwingPosList[i][j][1],SwingVectorList[i][j][0],SwingVectorList[i][j][1]]
-                            soa = np.vstack([soa, newrow])
-
-                        X, Y, U, V = zip(*soa)
-                        ax = plt.gca()
-                        ax.quiver(X, Y, U, V, angles='xy', scale_units='xy', scale=1)
-                        ax.set_xlim([0, 500])
-                        ax.set_ylim([0, 600])
-                        for j in range(16) :
-                            plt.scatter(SwingPosList[i][j][0], SwingPosList[i][j][1], s=50)
-
-                        plt.gca().invert_yaxis()
-                        output_fileName = "vector/output_" + str(outputVector_fileNum)
-                        plt.savefig(output_fileName+".png")
-                        outputVector_fileNum += 1
-                        plt.clf()
-                    
-    os.remove(fileName)
-
-    fileNumber += 1
-
-
-'''
-with open('Mykey/000000000054_keypoints.json') as f:
-    data = json.load(f)
-    print(len(data["people"]))
-'''
-
-'''
-for index, currentFrameName in enumerate(Target_json_files):
-    currentVector = generateVector(path_to_Target+currentFrameName) #取得target的向量資訊
-
-    percent = (index+1) / len(Target_json_files) #取得這個frame所占百分比
-    whichToChoose =  percent*len(Compare_json_files)
-
-    compareVector = []
-    if whichToChoose < 1 : #直接使用第一個
-        compareVector = generateVector(compareDir+Compare_json_files[0]) #取得要比對的向量資訊
-    else:
-        if whichToChoose % 1 != 0: #如果是小數,要用2個frame做merge
-            newKeyList = mergeFrame(whichToChoose,compareDir+Compare_json_files[math.floor(whichToChoose)-1],compareDir+Compare_json_files[math.floor(whichToChoose)])
-            compareVector = generateVectorFromList(newKeyList) #取得要比對的向量資訊
-        else: #整數直接取用
-            compareVector = generateVector(compareDir+Compare_json_files[int(whichToChoose)-1]) #取得要比對的向量資訊
-    totalLoss += VectorDiffLoss(currentVector,compareVector)
-    
-print(f"total -{totalLoss/len(Target_json_files)}")
-'''
-
-
-
-
+    X, Y, U, V = zip(*soa)
+    plt.figure()
+    ax = plt.gca()
+    ax.quiver(X, Y, U, V, angles='xy', scale_units='xy', scale=1)
+    ax.set_xlim([0, 500])
+    ax.set_ylim([0, 600])
+    for j in range(16) :
+        plt.scatter(SwingPosList[0][j][0], SwingPosList[0][j][1], s=50)
+    output_fileName = "testVector"
+    plt.gca().invert_yaxis()
+    plt.savefig(output_fileName+".png")
+    plt.clf()
