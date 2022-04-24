@@ -1,7 +1,7 @@
 import socket
 
-#192.168.194.223
-host, port = "192.168.1.107", 25001
+
+host, port = "192.168.1.112", 25001
 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 sock.connect((host, port))
 

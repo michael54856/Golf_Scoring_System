@@ -7,9 +7,10 @@ import time
 import glob
 import matplotlib.pyplot as plt
 import socket
+import cv2
 
-
-host, port = "192.168.194.223", 25001
+#192.168.194.223
+host, port = "192.168.1.107", 25001
 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 sock.connect((host, port))
 
@@ -326,7 +327,7 @@ def scoreCalculate(VectorList,path_to_Target):
 lastFiles = glob.glob('Mykey/*')
 for f in lastFiles:
     os.remove(f)
-subprocess.Popen(["C:\\Users\\michael\\Desktop\\openpose\\build\\x64\\Debug\\OpenPoseDemo.exe","--model_folder","C:\\Users\\michael\\Desktop\\openpose\\models","--num_gpu_start","0","--process_real_time","-number_people_max","1","--net_resolution","480x480","--write_json","MyKey"])
+subprocess.Popen(["C:\\Users\\michael\\Desktop\\openpose\\build\\x64\\Debug\\OpenPoseDemo.exe","--model_folder","C:\\Users\\michael\\Desktop\\openpose\\models","--camera","0","--num_gpu_start","0","--process_real_time","-number_people_max","1","--net_resolution","480x480","--write_json","MyKey"])
 fileNumber = 0
 
 swingState = 0
@@ -412,19 +413,22 @@ while True:
                     swingState = 0
                     score += scoreCalculate(SwingVectorList,'Output_Video_Key/Front_Swing/')
                     score /= 2
+                    
+    
+                    camera = cv2.VideoCapture(0,cv2.CAP_DSHOW)
+                    return_value, image = camera.read()
+                    cv2.imwrite('opencv.png', image)
 
                     passStr = str(score)
                     if score <= 1000:
-                        passStr = 'good'
+                        passStr = '3'
                     elif score > 1000 and score <= 2000:
-                        passStr = 'medium'
+                        passStr = '2'
                     else:
-                        passStr = 'bad'
+                        passStr = '1'
 
                     print(f'your swing score : {score} , {passStr}')
 
-                    sock.sendall(passStr.encode("UTF-8")) #Converting string to Byte, and sending it to C#
-                    receivedData = sock.recv(1024).decode("UTF-8") #receiveing data in Byte fron C#, and converting it to String
 
                     outputVector_fileNum = 0
 
@@ -455,6 +459,10 @@ while True:
                         plt.savefig(output_fileName+".png")
                         outputVector_fileNum += 1
                         plt.clf()
+
+                    passStr += ',' + str(len(SwingVectorList))
+                    sock.sendall(passStr.encode("UTF-8")) #Converting string to Byte, and sending it to C#
+                    receivedData = sock.recv(1024).decode("UTF-8") #receiveing data in Byte fron C#, and converting it to String
                     
     os.remove(fileName)
 
