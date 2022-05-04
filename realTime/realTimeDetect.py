@@ -339,6 +339,7 @@ ReadyVectorList = []
 SwingVectorList = []
 
 SwingPosList = []
+ReadyPosList = []
 
 pointLost = []
 
@@ -372,6 +373,7 @@ while True:
 
             if swingState == 1:
                 ReadyVectorList.append(currentVector)
+                ReadyPosList.append(currentPos)
 
             if swingState == 2:
                 SwingVectorList.append(currentVector)
@@ -388,6 +390,8 @@ while True:
                 if VectorDiffLoss(currentVector,ready_begin_compareVector) < 620 : #重新抓取
                     ReadyVectorList.clear()
                     ReadyVectorList.append(currentVector)
+                    ReadyPosList.clear()
+                    ReadyPosList.append(currentPos)
                     score = 0
                     swingState = 1
                     passStr = "-2"
@@ -414,10 +418,11 @@ while True:
                     score += scoreCalculate(SwingVectorList,'Output_Video_Key/Front_Swing/')
                     score /= 2
                     
-    
+                    '''
                     camera = cv2.VideoCapture(0,cv2.CAP_DSHOW)
                     return_value, image = camera.read()
                     cv2.imwrite('opencv.png', image)
+                    '''
 
                     passStr = str(score)
                     if score <= 1000:
@@ -429,6 +434,9 @@ while True:
 
                     print(f'your swing score : {score} , {passStr}')
 
+                    finishStr = 'finish' 
+                    sock.sendall(finishStr.encode("UTF-8")) #Converting string to Byte, and sending it to C#
+                    receivedData = sock.recv(1024).decode("UTF-8") #receiveing data in Byte fron C#, and converting it to String
 
                     outputVector_fileNum = 0
 
@@ -436,6 +444,29 @@ while True:
                     filelist = glob.glob(os.path.join(image_dir, "*"))
                     for f in filelist:
                         os.remove(f)
+
+                    for i in range(len(ReadyVectorList)) :
+                        plt.rcParams["figure.figsize"] = [10, 10]
+                        plt.rcParams["figure.autolayout"] = True
+                        soa = np.array([0,0,0,0])
+
+                        for j in range(16) :
+                            newrow = [ReadyPosList[i][j][0],ReadyPosList[i][j][1],ReadyVectorList[i][j][0],ReadyVectorList[i][j][1]]
+                            soa = np.vstack([soa, newrow])
+
+                        X, Y, U, V = zip(*soa)
+                        ax = plt.gca()
+                        ax.quiver(X, Y, U, V, angles='xy', scale_units='xy', scale=1)
+                        ax.set_xlim([0, 500])
+                        ax.set_ylim([0, 600])
+                        for j in range(16) :
+                            plt.scatter(ReadyPosList[i][j][0], ReadyPosList[i][j][1], s=50)
+
+                        plt.gca().invert_yaxis()
+                        output_fileName = "vector/output_" + str(outputVector_fileNum)
+                        plt.savefig(output_fileName+".png")
+                        outputVector_fileNum += 1
+                        plt.clf()
 
                     for i in range(len(SwingVectorList)) :
                         plt.rcParams["figure.figsize"] = [10, 10]
@@ -460,7 +491,7 @@ while True:
                         outputVector_fileNum += 1
                         plt.clf()
 
-                    passStr += ',' + str(len(SwingVectorList))
+                    passStr += ',' + str(outputVector_fileNum)
                     sock.sendall(passStr.encode("UTF-8")) #Converting string to Byte, and sending it to C#
                     receivedData = sock.recv(1024).decode("UTF-8") #receiveing data in Byte fron C#, and converting it to String
                     
